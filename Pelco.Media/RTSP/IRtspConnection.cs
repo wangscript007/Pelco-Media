@@ -5,6 +5,7 @@
 // transmitted in any form by any means or for any purpose without the express
 // written permission of Pelco.
 //
+using System;
 using System.Net;
 
 namespace Pelco.Media.RTSP
@@ -14,6 +15,11 @@ namespace Pelco.Media.RTSP
     /// </summary>
     public interface IRtspConnection
     {
+        /// <summary>
+        /// Indicates when the connection has been closed
+        /// </summary>
+        event EventHandler ConnectionClosed;
+
         /// <summary>
         /// Gets flag indicating if the <see cref="IRtspConnection"/> is connected or not.
         /// </summary>

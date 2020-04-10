@@ -8,7 +8,6 @@
 using NLog;
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -27,14 +26,14 @@ namespace Pelco.Media.RTSP.Server
         private ManualResetEvent _stop;
         private IRequestDispatcher _dispatcher;
         private BlockingCollection<RtspMessage> _messages;
-        private Dictionary<string, RtspListener> _listeners;
+        private ConcurrentDictionary<string, RtspListener> _listeners;
 
         public RtspServer(int port, IRequestDispatcher dispatcher)
         {
             _port = port;
             _dispatcher = dispatcher;
             _stop = new ManualResetEvent(false);
-            _listeners = new Dictionary<string, RtspListener>();
+            _listeners = new ConcurrentDictionary<string, RtspListener>();
         }
 
         ~RtspServer()
@@ -76,15 +75,15 @@ namespace Pelco.Media.RTSP.Server
                     _messages.Dispose();
                     _listener = null;
 
-                    foreach (var entry in _listeners)
+                    foreach (var listener in _listeners)
                     {
                         try
                         {
-                            entry.Value.Stop();
+                            listener.Value.Stop();
                         }
                         catch (Exception e)
                         {
-                            LOG.Error($"Received exception while stopping RTSP listener for {entry.Key}, message={e.Message}");
+                            LOG.Error($"Received exception while stopping RTSP listener for {listener.Key}, message={e.Message}");
                         }
                     }
                     _listeners.Clear();
@@ -102,19 +101,28 @@ namespace Pelco.Media.RTSP.Server
                 {
                     var client = _listener.AcceptTcpClient();
                     var conn = new RtspConnection(client);
+                    conn.ConnectionClosed += ConnConnectionClosed;
+
                     var listener = new RtspListener(conn, OnRtspRequest);
 
                     LOG.Debug($"Accepted client connection from '{conn.RemoteAddress}'");
 
                     listener.Start();
 
-                    _listeners.Add(conn.RemoteAddress, listener);
+                    _listeners.TryAdd(conn.RemoteAddress, listener);
                 }
                 catch (Exception e)
                 {
                     LOG.Error(e, $"Caught exception while accepting client connection, message={e.Message}");
                 }
             }
+        }
+
+        private void ConnConnectionClosed(object sender, EventArgs e)
+        {
+            var conn = sender as RtspConnection;
+            conn.ConnectionClosed -= ConnConnectionClosed;
+            _listeners.TryRemove(conn.RemoteAddress, out _);
         }
 
         private void OnRtspRequest(RtspChunk chunk)
@@ -169,7 +177,10 @@ namespace Pelco.Media.RTSP.Server
                                 response.Headers[RtspHeaders.Names.CONTENT_LENGTH] = response.Body.Length.ToString();
                             }
 
+                            // Always send headers
                             response.Headers[RtspHeaders.Names.CSEQ] = receivedCseq.ToString();
+                            response.Headers[RtspHeaders.Names.DATE] = DateTime.UtcNow.ToString("ddd, dd MMM yyy HH':'mm':'ss 'GMT'");
+
                             listener.SendResponse(response);
 
                             // Remove listener on teardown.
@@ -178,7 +189,7 @@ namespace Pelco.Media.RTSP.Server
                             if (request.Method == RtspRequest.RtspMethod.TEARDOWN)
                             {
                                 listener.Stop();
-                                _listeners.Remove(listener.Endpoint.ToString());
+                                _listeners.TryRemove(listener.Endpoint.ToString(), out _);
                             }
                         }
                     }

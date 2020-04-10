@@ -46,14 +46,14 @@ namespace Pelco.Media.RTSP.Server
         /// <param name="request"></param>
         /// <returns></returns>
         public abstract RtspResponse TearDown(RtspRequest request);
-        
+
         /// <summary>
         /// <see cref="IRequestHandler.Init"/>
         /// </summary>
         public virtual void Init()
         {
         }
-        
+
         /// <summary>
         /// <see cref="IRequestHandler.Close"/>
         /// </summary>
@@ -61,7 +61,7 @@ namespace Pelco.Media.RTSP.Server
         {
         }
 
-        public RtspResponse Options(RtspRequest request)
+        public virtual RtspResponse Options(RtspRequest request)
         {
             return RtspResponse.CreateBuilder()
                                .Status(RtspResponse.Status.Ok)

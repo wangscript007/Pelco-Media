@@ -19,9 +19,11 @@ namespace Pelco.Media.RTSP
     /// </summary>
     public sealed class RtspConnection : IRtspConnection, IDisposable
     {
-        private static readonly Logger LOG = LogManager.GetCurrentClassLogger();
+        public event EventHandler ConnectionClosed;
 
+        private static readonly Logger LOG = LogManager.GetCurrentClassLogger();
         private readonly object WriteLock = new object();
+        private bool IsOpen => _tcpClient != null && _tcpClient.Connected;
 
         private Stream _stream;
         private IPEndPoint _endpoint;
@@ -83,7 +85,7 @@ namespace Pelco.Media.RTSP
         {
             get
             {
-                return _tcpClient.Connected;
+                return IsOpen && _tcpClient.Connected;
             }
         }
 
@@ -113,7 +115,7 @@ namespace Pelco.Media.RTSP
         {
             get
             {
-                return _stream.CanRead;
+                return IsOpen && _stream.CanRead;
             }
         }
 
@@ -121,7 +123,7 @@ namespace Pelco.Media.RTSP
         {
             get
             {
-                return _stream.CanWrite;
+                return IsOpen && _stream.CanWrite;
             }
         }
 
@@ -215,8 +217,17 @@ namespace Pelco.Media.RTSP
         /// </summary>
         public void Close()
         {
-            LOG.Info($"Closing RtspConnection for {_endpoint}");
-            Dispose();
+            if (IsOpen)
+            {
+                LOG.Info($"Closing RtspConnection for {_endpoint}");
+                ConnectionClosed?.Invoke(this, EventArgs.Empty);
+                _stream.Close();
+                _stream.Dispose();
+                _tcpClient.Close();
+                _tcpClient.Dispose();
+                _stream = null;
+                _tcpClient = null;
+            }
         }
 
         /// <summary>
@@ -229,11 +240,7 @@ namespace Pelco.Media.RTSP
                 return;
             }
 
-            if (_tcpClient != null)
-            {
-                _stream.Dispose();
-                _tcpClient.Close();
-            }
+            Close();
 
             LOG.Info($"Reconnecting RtspConnection to {_endpoint}");
             _tcpClient = new TcpClient(_endpoint.Address.ToString(), _endpoint.Port);
@@ -247,9 +254,7 @@ namespace Pelco.Media.RTSP
         /// </summary>
         public void Dispose()
         {
-            _stream?.Dispose();
-            _tcpClient?.Dispose();
-
+            Close();
             GC.SuppressFinalize(this);
         }
 

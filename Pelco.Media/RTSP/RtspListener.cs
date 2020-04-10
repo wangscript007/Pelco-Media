@@ -29,7 +29,6 @@ namespace Pelco.Media.RTSP
     public class RtspListener
     {
         private static readonly Logger LOG = LogManager.GetCurrentClassLogger();
-
         private readonly object StartedLock = new object();
 
         private bool _started;
@@ -80,11 +79,10 @@ namespace Pelco.Media.RTSP
         /// <param name="closeConnection">Flag indicating if the connection should be closed as well.</param>
         public void Stop(bool closeConnection = true)
         {
-            if (closeConnection && _connection.IsConnected)
+            if (closeConnection)
             {
                 _connection.Close();
             }
-
         }
 
         public void Reconnect()
